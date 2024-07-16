@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+
+<style>
+gamepad-dash{
+		color: purple;
+	}
+</style>
+<style>
+	*::part(gamepad-pose){
+		color: yellow;
+	}
+</style>
+
+<script>
+	let guard 	=  ((x) => !(typeof x === typeof undefined|| x === null));
+	/*Widgit to probide a simple interface for handling lifecycles*/
+	make_widgit		= (elment,install,uninstall,update,construct) => class {
+						#data=document.createElement(elment);
+						install_at(root)	{if(guard (this.#data))	install(this.#data,root);};
+						uninstall()			{if(guard (this.#data))	uninstall(this.#data);};
+						update(v)			{if(guard (this.#data))	update(this.#data,v);};
+						constructor()		{if(guard(this.#data))	construct(this.#data);};
+					};
+	make_simple_widgit	=	(element,update,construct=()=>{}) => make_widgit(element,(d,r)=>r.appendChild(d),r=>r.remove(),update,construct);
+	/*widgits*/
+	const	metred	=	make_simple_widgit('meter',(d,v)=>d.setAttribute('value',v),(d)=>{d.setAttribute("min",-1),d.setAttribute("max",1)});
+	const	metredd	=	make_simple_widgit('meter',(d,v)=>d.setAttribute('value',v),(d)=>{d.setAttribute("min",0),d.setAttribute("max",1)});
+	const	divved	=	make_simple_widgit('div',(d,v)=>d.textContent=v);
+	const	checked	=	make_simple_widgit('input',(d,v)=>d.checked=v,(d)=>{d.type="checkbox";d.disabled="true"});
+
+	let my_element_maker = (widgit,name)=> {
+		return class extends HTMLElement{	
+			#data;
+			#widgit = new widgit;
+			get #root(){return this.shadowRoot;}
+			set	[name](v){
+				this.#data	=	v;
+				this.#widgit.update(v);
+				};
+			get	[name](){return	this.#data;};
+		constructor(){
+			super();
+			this.attachShadow({mode:"open"});
+			this.#widgit.install_at(this.#root);
+		}
+		};
+	}
+
+	const	[Gamepad_Axis,Gamepad_Timestamp,Gamepad_ID,Gamepad_Index,Gamepad_Connected,Gamepad_Mapping,Gamepad_Hand,Gamepad_Button_Pressed,Gamepad_Button_Touched,Gamepad_Button_Value] = 	
+	[[metred,"axis"],[divved,"timestamp"],[divved,"id"],[divved,"index"],[checked,"connected"],[divved,"mapping"],[divved,"hand"],[checked,"pressed"],[checked,"touched"],[metredd,"value"]].map (([w,n])=>my_element_maker(w,n))
+
+	class Gamepad_Button	extends	HTMLElement{
+		#button_element=document.createElement('div');
+			#pressed=document.createElement('gamepad-button-pressed');
+			#touched=document.createElement('gamepad-button-touched');
+			#value=document.createElement('gamepad-button-value');
+	
+		get #root(){return this.shadowRoot;}
+		set button(v){
+			this.#pressed.pressed=v.pressed;
+			this.#touched.touched=v.touched;
+			this.#value.value=v.value;
+		}
+		get button(){
+			return {pressed:this.#pressed.pressed,touched:this.#touched.touched,value:this.#value.value};
+		}
+		constructor(){
+			super();
+			this.attachShadow({mode:"open"});
+				[this.#pressed,this.#touched,this.#value].map(e => this.#button_element.appendChild(e));
+			this.#root.appendChild(this.#button_element);
+		}	
+	}
+
+	class	Gamepad_Buttons	extends	HTMLElement	{
+		#buttons = [];
+		#buttons_elements;
+		get #root(){return this.shadowRoot;}
+		get	buttons(){
+			return	this.#buttons;
+		}
+		set	buttons(v){
+			this.#buttons = v;
+			this.#root.innerHTML="";
+			for (const [k,v] of this.buttons.entries()){
+					/*SETUP the gamepad-button*/
+					let my_button_v = document.createElement('gamepad-button');
+					my_button_v.setAttribute("part","gamepad-button");					
+						my_button_v.button = v;
+					this.#root.appendChild(my_button_v);
+				}
+		}
+		constructor(){
+			super();
+			this.attachShadow({mode:"open"});
+		}
+
+	}
+	class	Gamepad_Axes	extends	HTMLElement	{
+		#axes = [];
+		#axis_elements;
+		get #root(){return this.shadowRoot;}
+		get	axes(){
+			return	this.#axes;
+		}
+		set	axes(v){
+			this.#axes = v;
+			this.#root.innerHTML="";
+			let my_fragment = document.createDocumentFragment();
+			for (const [k,v] of this.axes.entries()){
+					/*SETUP the gamepad-button*/
+					let ve = document.createElement('gamepad-axis');
+						ve.setAttribute("part","gamepad-axis");					
+						ve.axis = v;
+					my_fragment.appendChild(ve);
+				}
+			this.#root.appendChild(my_fragment);
+		}
+		constructor(){
+			super();
+			this.attachShadow({mode:"open"});
+		}
+
+	}
+
+	/*TODO LATER*/
+	class	Gamepad_GamepadPose extends HTMLElement	{
+
+	}
+
+	/*Gamepad_Gamepad*/
+	class Gamepad_Gamepad extends	HTMLElement{
+		static #cpnts		=	function*(){yield* ["id","index","mapping","hand","connected","buttons","axes","timestamp"].values(); };			
+		static #valid_cpnts	=	function*(gamepad){for(const c of Gamepad_Gamepad.#cpnts()){if(guard(gamepad?.[c])) yield c;} };			
+		get #root(){return this.shadowRoot;}
+		get ["gamepad"](){
+			//TODO;
+		}
+		set	["gamepad"](v){
+			/*a hack atm*/
+			this.#rebuild(v);
+		}
+		static #build_at(gamepad,root){
+			let my_fragment = document.createDocumentFragment();
+			if( guard(gamepad)  ){
+				
+				for(const c of Gamepad_Gamepad.#valid_cpnts(gamepad)){
+					/*SETUP	the gamepad-${c}*/
+					var	my_c = document.createElement(`gamepad-${c}`);
+						my_c.setAttribute("part",`gamepad-${c}`);
+						my_c[c] = gamepad[c];
+					my_fragment.appendChild(my_c);		
+				}
+				/*pose and hapticActuators TODO later*/
+				var	my_pose					=	document.createElement('div');
+					my_pose.setAttribute("part","gamepad-pose")
+					my_pose.innerHTML		=	gamepad?.pose;
+			my_fragment.appendChild(my_pose);
+				}
+			root.appendChild(my_fragment);
+
+		}
+		#build(gamepad){
+			Gamepad_Gamepad.#build_at(gamepad,this.#root);
+
+		}
+		#rebuild(gamepad){
+			this.#root.innerHTML="";
+			this.#build(gamepad);
+}
+	constructor()
+	{
+		super();
+		this.attachShadow({mode:"open"});
+	}
+};
+
+	/*Gamepad_Dash manages the Rendering & Lifetime of Gamepads*/
+	class	Gamepad_Dash extends HTMLElement	{	
+		#connected;
+		#getter;
+		#inter;
+		get #root(){return this.shadowRoot;}
+		get gamepad_getter(){
+			return this.#getter()};
+		constructor(){
+			super();
+			this.attachShadow({mode:"open"});
+		}
+		setgetvalue	(v) {this.#getter	=	()=>v;}
+		setgetindex (A,i){
+			this.#getter = () => A()[i];
+		}
+
+		build = (my_gamepad) => {
+		const my_root = this.#root;
+			if( guard(my_gamepad)  ){
+			let x	=	document.createElement("gamepad-gamepad");
+				x.setAttribute("part","gamepad-gamepad")
+				x.gamepad	=	my_gamepad;
+			my_root.appendChild(x);
+
+			}
+			else {this.remove()};
+		}
+		rebuild = ()=>{this.innerHTML="";this.shadowRoot.innerHTML=""; {this.build(this.gamepad_getter);} };
+		
+		connectedCallback(){
+			this.#connected=true;
+			/*we use requestAnimationFrame to manage rendering*/
+			var callback = ()=>{
+				this.rebuild();
+				if(this.#connected)
+				requestAnimationFrame(callback);
+
+			}
+			requestAnimationFrame(callback);
+		}
+		disconnectedCallback(){
+			this.#connected=false;
+		}
+	}
+	/*Gamepad_DashBoard Manages only job is to dispatch dashes*/
+	class	Gamepad_DashBoard extends HTMLElement{
+		get #root(){return this.shadowRoot;}
+		constructor(){
+			super();
+			this.attachShadow({mode:"open"});
+		}
+		connectedCallback(){
+			window.addEventListener("gamepadconnected",	e => {
+				console.log(e.gamepad)
+				var my_dash = document.createElement('gamepad-dash');
+
+				my_dash.setgetindex(()=>navigator.getGamepads(),e.gamepad.index)
+				//my_dash.setgetvalue(e.gamepad);
+				this.#root.appendChild(my_dash);
+	
+				return;
+				}
+			);
+			console.log("dashboard connected")
+		}
+	}
+	/*REGISTER the required custom elments*/
+	[
+		["gamepad-id",Gamepad_ID],["gamepad-index",Gamepad_Index],["gamepad-hand",Gamepad_Hand],["gamepad-connected",Gamepad_Connected],["gamepad-button",Gamepad_Button],["gamepad-buttons",Gamepad_Buttons],["gamepad-dash",Gamepad_Dash],["gamepad-axis",Gamepad_Axis],["gamepad-axes",Gamepad_Axes],["gamepad-timestamp",Gamepad_Timestamp],["gamepad-dashboard",Gamepad_DashBoard],["gamepad-button-pressed",Gamepad_Button_Pressed],["gamepad-button-touched",Gamepad_Button_Touched],["gamepad-button-value",Gamepad_Button_Value],["gamepad-gamepad",Gamepad_Gamepad]
+	].map(([n,N])=>customElements.define(n,N))
+
+	</script>
+	
+<html>
+	<h1>Gamepad Test</h1>
+	<gamepad-dashboard/>
+</html>
